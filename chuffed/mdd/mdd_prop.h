@@ -106,7 +106,6 @@ public:
 	void retrieveReason(vec<int>& out, int var, int val, int lim, int threshold = 2);
 
 	void static_inference(vec<int>& inferences);
-	void static_inference(vec<Lit>& inferences);
 
 	inline int numNodes() { return nodes.size(); }
 
@@ -147,7 +146,7 @@ public:
 
 		if (opts.expl_strat == MDDOpts::E_KEEP) {
 			vec<Lit> ps(expl.size());
-			for (int k = 1; k < expl.size(); k++) {
+			for (unsigned int k = 1; k < expl.size(); k++) {
 				ps[k] = get_val_lit(expl[k]);
 			}
 			ps[0] = p;
@@ -158,7 +157,7 @@ public:
 			return c;
 		}
 		Clause* r = Reason_new(expl.size());
-		for (int k = 1; k < expl.size(); k++) {
+		for (unsigned int k = 1; k < expl.size(); k++) {
 			(*r)[k] = get_val_lit(expl[k]);
 		}
 		return r;
@@ -171,7 +170,6 @@ public:
 	}
 
 private:
-	void clear_val(Value v);
 	void kill_dom(unsigned int /*lim*/, inc_edge* e, vec<int>& kfa, vec<int>& kfb);
 
 	// Parameters
