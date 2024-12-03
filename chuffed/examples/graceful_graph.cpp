@@ -1,44 +1,52 @@
-#include <iomanip>
-#include <cstdio>
+#include "chuffed/branching/branching.h"
+#include "chuffed/core/engine.h"
+#include "chuffed/core/options.h"
+#include "chuffed/core/sat.h"
+#include "chuffed/globals/globals.h"
+#include "chuffed/ldsb/ldsb.h"
+#include "chuffed/primitives/primitives.h"
+#include "chuffed/support/vec.h"
+#include "chuffed/vars/int-var.h"
+#include "chuffed/vars/modelling.h"
+#include "chuffed/vars/vars.h"
+
 #include <cassert>
-#include <chuffed/core/engine.h>
-#include <chuffed/core/propagator.h>
-#include <chuffed/branching/branching.h>
-#include <chuffed/vars/modelling.h>
-#include <chuffed/ldsb/ldsb.h>
+#include <cstdio>
+#include <cstdlib>
+#include <iomanip>
+#include <ostream>
 
 class GracefulGraph : public Problem {
 public:
-	int const m;                                    // size of cliques
-	int const n;                                    // number of cliques
-	vec<IntVar*> x;                                 // vertex labels
-	vec<IntVar*> d;                                 // raw difference of vertex labels
-	vec<IntVar*> ad;                                // absolute differences of vertex labels
+	const int m;      // size of cliques
+	const int n;      // number of cliques
+	vec<IntVar*> x;   // vertex labels
+	vec<IntVar*> d;   // raw difference of vertex labels
+	vec<IntVar*> ad;  // absolute differences of vertex labels
 
 	GracefulGraph(int _m, int _n) : m(_m), n(_n) {
-
-		int nodes = m*n;
-		int nedges = m*(m-1)/2*n + (n-1)*m;
+		const int nodes = m * n;
+		const int nedges = m * (m - 1) / 2 * n + (n - 1) * m;
 
 		vec<int> origins;
 		vec<int> destinations;
 
 		for (int i = 0; i < n; i++) {
 			for (int j = 0; j < m; j++) {
-				for (int k = j+1; k < m; k++) {
-					origins.push(i*m+j);
-					destinations.push(i*m+k);
+				for (int k = j + 1; k < m; k++) {
+					origins.push(i * m + j);
+					destinations.push(i * m + k);
 				}
 			}
 		}
-		for (int i = 0; i < n-1; i++) {
+		for (int i = 0; i < n - 1; i++) {
 			for (int j = 0; j < m; j++) {
-				origins.push(i*m+j);
-				destinations.push((i+1)*m+j);
+				origins.push(i * m + j);
+				destinations.push((i + 1) * m + j);
 			}
 		}
 
-		assert(origins.size() == nedges);
+		assert(static_cast<int>(origins.size()) == nedges);
 
 		createVars(x, nodes, 0, nedges);
 		createVars(d, nedges, -nedges, nedges);
@@ -48,21 +56,21 @@ public:
 			int_minus(x[origins[i]], x[destinations[i]], d[i]);
 			int_abs(d[i], ad[i]);
 		}
-			
+
 		all_different(x);
 		all_different(ad);
 
 		branch(x, VAR_INORDER, VAL_MIN);
-//		branch(x, VAR_SIZE_MIN, VAL_MIN);
+		//		branch(x, VAR_SIZE_MIN, VAL_MIN);
 
 		output_vars(x);
 
 		if (so.ldsb) {
-				// clique sym
+			// clique sym
 			vec<IntVar*> sym1;
 			for (int i = 0; i < m; i++) {
 				for (int j = 0; j < n; j++) {
-					sym1.push(x[j*m+i]);
+					sym1.push(x[j * m + i]);
 				}
 			}
 			var_seq_sym_ldsb(m, n, sym1);
@@ -70,71 +78,76 @@ public:
 			// flip sym
 			vec<IntVar*> sym2;
 
-			for (int i = 0; i < n/2; i++) {
+			for (int i = 0; i < n / 2; i++) {
 				for (int j = 0; j < m; j++) {
-					sym2.push(x[i*m+j]);
+					sym2.push(x[i * m + j]);
 				}
 			}
-			for (int i = 0; i < n/2; i++) {
-				for (int j = 0; j < m; j++) {							
-					sym2.push(x[(n-1-i)*m+j]);
+			for (int i = 0; i < n / 2; i++) {
+				for (int j = 0; j < m; j++) {
+					sym2.push(x[(n - 1 - i) * m + j]);
 				}
 			}
 
-			var_seq_sym_ldsb(2, m*(n/2), sym2);
+			var_seq_sym_ldsb(2, m * (n / 2), sym2);
 
 			// flip values symmetry
 
 			vec<int> sym3;
-			for (int i = 0; i <= nedges; i++) sym3.push(i);
-			for (int i = 0; i <= nedges; i++) sym3.push(nedges-i);
+			for (int i = 0; i <= nedges; i++) {
+				sym3.push(i);
+			}
+			for (int i = 0; i <= nedges; i++) {
+				sym3.push(nedges - i);
+			}
 
-			val_seq_sym_ldsb(2, nedges+1, x, sym3);
+			val_seq_sym_ldsb(2, nedges + 1, x, sym3);
 
 		} else if (so.sym_static) {
-			for (int i = 0; i < m-1; i++) {
-				int_rel(x[i], IRT_LT, x[i+1]);
+			for (int i = 0; i < m - 1; i++) {
+				int_rel(x[i], IRT_LT, x[i + 1]);
 			}
 			for (int i = 0; i < m; i++) {
-				int_rel(x[0], IRT_LT, x[(n-1)*m+i]);
+				int_rel(x[0], IRT_LT, x[(n - 1) * m + i]);
 			}
 		}
-
 	}
 
-	void restrict_learnable() {
+	void restrict_learnable() override {
 		printf("Setting learnable white list\n");
-		for (int i = 0; i < sat.nVars(); i++) sat.flags[i] = 0;
-		for (int i = 0; i < x.size(); i++) {
+		for (int i = 0; i < sat.nVars(); i++) {
+			sat.flags[i] = LitFlags(false, false, false);
+		}
+		for (unsigned int i = 0; i < x.size(); i++) {
 			assert(x[i]->getType() == INT_VAR_EL);
-			((IntVarEL*) x[i])->setVLearnable();
-			((IntVarEL*) x[i])->setVDecidable(true);
+			((IntVarEL*)x[i])->setVLearnable();
+			((IntVarEL*)x[i])->setVDecidable(true);
 		}
 	}
 
-  void print(std::ostream& os) {
+	void print(std::ostream& os) override {
 		for (int i = 0; i < n; i++) {
 			for (int j = 0; j < m; j++) {
-        os << " " << std::setw(4) << std::setfill('0') << x[i*m+j]->getVal() << ", ";
+				os << " " << std::setw(4) << std::setfill('0') << x[i * m + j]->getVal() << ", ";
 			}
 			os << " | ";
 			for (int j = 0; j < m; j++) {
-				for (int k = j+1; k < m; k++) {
-          os << " " << std::setw(4) << std::setfill('0')
-             << ((int) abs(x[i*m+j]->getVal() - x[i*m+k]->getVal())) << ", ";
+				for (int k = j + 1; k < m; k++) {
+					os << " " << std::setw(4) << std::setfill('0')
+						 << ((int)abs(x[i * m + j]->getVal() - x[i * m + k]->getVal())) << ", ";
 				}
 			}
 			os << "\n";
 		}
 		os << "\n";
 	}
-
 };
 
 int main(int argc, char** argv) {
 	parseOptions(argc, argv);
 
-	int m, n;
+	int m;
+	int n;
 
 	assert(argc == 3);
 	m = atoi(argv[1]);
@@ -144,6 +157,3 @@ int main(int argc, char** argv) {
 
 	return 0;
 }
-
-
-

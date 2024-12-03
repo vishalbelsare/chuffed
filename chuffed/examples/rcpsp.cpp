@@ -1,52 +1,59 @@
-#include <cstdio>
+#include "chuffed/branching/branching.h"
+#include "chuffed/core/engine.h"
+#include "chuffed/core/options.h"
+#include "chuffed/primitives/primitives.h"
+#include "chuffed/support/misc.h"
+#include "chuffed/support/vec.h"
+#include "chuffed/vars/int-var.h"
+#include "chuffed/vars/modelling.h"
+
 #include <cassert>
-#include <chuffed/core/engine.h>
-#include <chuffed/core/propagator.h>
-#include <chuffed/branching/branching.h>
-#include <chuffed/vars/modelling.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <ostream>
 
 class RCPSP : public Problem {
 public:
 	// Constants
 
-	int n_res;                                   // number of resources
-	vec<int> rc;                                 // resource capacities
+	int n_res;    // number of resources
+	vec<int> rc;  // resource capacities
 
-	int n_tasks;                                 // number of tasks
-	vec<int> d;                                  // task durations
-	int sum_d;                                   // total duration
-	vec<vec<int> > rr;                           // resource requirements
-	vec<vec<int> > succ;                         // task successors
+	int n_tasks;          // number of tasks
+	vec<int> d;           // task durations
+	int sum_d;            // total duration
+	vec<vec<int> > rr;    // resource requirements
+	vec<vec<int> > succ;  // task successors
 
 	// Core variables
 
-	vec<IntVar*> s;                                // start times
-	IntVar* objective;                         // makespan
+	vec<IntVar*> s;     // start times
+	IntVar* objective;  // makespan
 
 	// Intermediate variables
-	vec<vec<IntVar*> > o;                        // whether task i is open at time j
+	vec<vec<IntVar*> > o;  // whether task i is open at time j
 
-
-	RCPSP(char *filename) {
+	RCPSP(char* filename) {
 		readData(filename);
 
-		int horizon = 250;
+		const int horizon = 250;
 
 		// Create vars
 
 		createVars(s, n_tasks, 0, horizon, true);
-		createVars(o, n_tasks, horizon+1, 0, 1, true);
+		createVars(o, n_tasks, horizon + 1, 0, 1, true);
 		createVar(objective, 0, horizon);
 
 		for (int i = 0; i < n_tasks; i++) {
-			((IntVarEL*) s[i])->setVDecidable(false);
+			((IntVarEL*)s[i])->setVDecidable(false);
 		}
 
 		// Post some constraints
 
 		for (int t = 0; t <= horizon; t++) {
 			for (int i = 0; i < n_tasks; i++) {
-				bool_rel(*s[i] <= t, BRT_AND, *s[i] > t-d[i], *o[i][t]);
+				bool_rel(*s[i] <= t, BRT_AND, *s[i] > t - d[i], *o[i][t]);
 			}
 		}
 
@@ -55,21 +62,27 @@ public:
 			bool in[n_tasks];
 			for (int i = 0; i < n_tasks; i++) {
 				in[i] = (d[i] > 0 && rr[r][i] > 0);
-				if (in[i]) a.push(rr[r][i]);
+				if (in[i]) {
+					a.push(rr[r][i]);
+				}
 			}
 			for (int t = 0; t <= horizon; t++) {
 				vec<IntVar*> x;
 				for (int i = 0; i < n_tasks; i++) {
-					if (in[i]) x.push(o[i][t]);
+					if (in[i]) {
+						x.push(o[i][t]);
+					}
 				}
 				int_linear(a, x, IRT_LE, rc[r]);
 			}
 		}
 
 		for (int i = 0; i < n_tasks; i++) {
-			for (int j = 0; j < succ[i].size(); j++) {
-				int k = succ[i][j];
-				if (k == n_tasks) continue;
+			for (unsigned int j = 0; j < succ[i].size(); j++) {
+				const int k = succ[i][j];
+				if (k == n_tasks) {
+					continue;
+				}
 				int_rel(s[i], IRT_LE, s[k], -d[i]);
 			}
 		}
@@ -80,23 +93,19 @@ public:
 
 		// Post some branchings
 
-
-
-//		branch(s, VAR_ACTIVITY, VAL_MIN);
+		//		branch(s, VAR_ACTIVITY, VAL_MIN);
 
 		branch(s, VAR_MIN_MIN, VAL_MIN);
 
 		optimize(objective, OPT_MIN);
 
-//		assert(!so.vsids);
-//		so.vsids = true;
-//		engine.branching.add(&sat);
-
-
+		//		assert(!so.vsids);
+		//		so.vsids = true;
+		//		engine.branching.add(&sat);
 	}
 
-	void readData(char *filename) {
-		FILE *fp = fopen(filename, "r");
+	void readData(char* filename) {
+		FILE* fp = fopen(filename, "r");
 		assert(fp);
 
 		rassert(fscanf(fp, "%d %d\n", &n_tasks, &n_res) == 2);
@@ -108,30 +117,35 @@ public:
 		succ.growTo(n_tasks);
 
 		rr.growTo(n_res);
-		for (int i = 0; i < n_res; i++) rr[i].growTo(n_tasks);
+		for (int i = 0; i < n_res; i++) {
+			rr[i].growTo(n_tasks);
+		}
 
 		assert(n_res == 4);
 		rassert(fscanf(fp, "%d %d %d %d\n", &rc[0], &rc[1], &rc[2], &rc[3]) == 4);
 
 		for (int i = 0; i < n_tasks; i++) {
-//			printf("%d: ", i);
-			char temp[1000], *s;
+			//			printf("%d: ", i);
+			char temp[1000];
+			char* s;
 			rassert(fgets(temp, 1000, fp));
-			if (i == 0) rassert(fgets(temp, 1000, fp));
+			if (i == 0) {
+				rassert(fgets(temp, 1000, fp));
+			}
 			s = strtok(temp, " \t\n");
 			d[i] = atoi(s);
 			for (int j = 0; j < n_res; j++) {
-				s = strtok(NULL, " \t\n");
+				s = strtok(nullptr, " \t\n");
 				rr[j][i] = atoi(s);
 			}
-			s = strtok(NULL, " \t\n");
-			int num_succ = atoi(s);
+			s = strtok(nullptr, " \t\n");
+			const int num_succ = atoi(s);
 			for (int j = 0; j < num_succ; j++) {
-				s = strtok(NULL, " \t\n");
-				succ[i].push(atoi(s)-2);
-//				printf("%d ", succ[i].last());
+				s = strtok(nullptr, " \t\n");
+				succ[i].push(atoi(s) - 2);
+				//				printf("%d ", succ[i].last());
 			}
-//			printf("\n");
+			//			printf("\n");
 		}
 
 		fclose(fp);
@@ -139,14 +153,13 @@ public:
 
 	// Function to print out solution
 
-  void print(std::ostream& os) {
+	void print(std::ostream& os) override {
 		for (int i = 0; i < n_tasks; i++) {
 			os << s[i]->getVal() << ", ";
 		}
 		os << "\n";
 		os << "makespan = " << objective->getVal() << "\n";
 	}
-
 };
 
 int main(int argc, char** argv) {
@@ -158,6 +171,3 @@ int main(int argc, char** argv) {
 
 	return 0;
 }
-
-
-

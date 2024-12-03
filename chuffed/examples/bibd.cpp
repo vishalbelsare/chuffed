@@ -1,10 +1,19 @@
-#include <cstdio>
+#include "chuffed/branching/branching.h"
+#include "chuffed/core/engine.h"
+#include "chuffed/core/options.h"
+#include "chuffed/core/sat.h"
+#include "chuffed/globals/globals.h"
+#include "chuffed/ldsb/ldsb.h"
+#include "chuffed/primitives/primitives.h"
+#include "chuffed/support/vec.h"
+#include "chuffed/vars/int-var.h"
+#include "chuffed/vars/modelling.h"
+#include "chuffed/vars/vars.h"
+
 #include <cassert>
-#include <chuffed/core/engine.h>
-#include <chuffed/core/propagator.h>
-#include <chuffed/branching/branching.h>
-#include <chuffed/vars/modelling.h>
-#include <chuffed/ldsb/ldsb.h>
+#include <cstdio>
+#include <cstdlib>
+#include <ostream>
 
 class BIBD : public Problem {
 public:
@@ -14,16 +23,14 @@ public:
 	int k;
 	int l;
 
-	vec<vec<IntVar*> > x;                           // vertex labels
-	vec<vec<vec<IntVar*> > > m;                     // raw difference of vertex labels
+	vec<vec<IntVar*> > x;        // vertex labels
+	vec<vec<vec<IntVar*> > > m;  // raw difference of vertex labels
 
 	BIBD(int _v, int _b, int _r, int _k, int _l) : v(_v), b(_b), r(_r), k(_k), l(_l) {
-
-//		b = (l * v * (v-1)) / (k * (k-1));
-//		r = (l * (v-1)) / (k-1);
+		//		b = (l * v * (v-1)) / (k * (k-1));
+		//		r = (l * (v-1)) / (k-1);
 
 		printf("v = %d, b = %d, r = %d, k = %d, l = %d\n", v, b, r, k, l);
-
 
 		createVars(x, v, b, 0, 1);
 
@@ -31,9 +38,11 @@ public:
 		for (int i = 0; i < v; i++) {
 			m[i].growTo(v);
 			for (int j = 0; j < v; j++) {
-				if (j <= i) continue;
+				if (j <= i) {
+					continue;
+				}
 				for (int k = 0; k < b; k++) {
-					m[i][j].push(newIntVar(0,1));
+					m[i][j].push(newIntVar(0, 1));
 				}
 			}
 		}
@@ -50,7 +59,7 @@ public:
 		}
 
 		for (int i = 0; i < v; i++) {
-			for (int j = i+1; j < v; j++) {
+			for (int j = i + 1; j < v; j++) {
 				for (int k = 0; k < b; k++) {
 					int_times(x[i][k], x[j][k], m[i][j][k]);
 				}
@@ -61,7 +70,7 @@ public:
 		vec<IntVar*> s;
 		flatten(x, s);
 
-//		branch(s, VAR_INORDER, VAL_MIN);
+		//		branch(s, VAR_INORDER, VAL_MIN);
 		branch(s, VAR_INORDER, VAL_MAX);
 
 		output_vars(s);
@@ -82,19 +91,21 @@ public:
 		}
 	}
 
-	void restrict_learnable() {
+	void restrict_learnable() override {
 		printf("Setting learnable white list\n");
-		for (int i = 0; i < sat.nVars(); i++) sat.flags[i] = 0;
+		for (int i = 0; i < sat.nVars(); i++) {
+			sat.flags[i] = LitFlags(false, false, false);
+		}
 		for (int i = 0; i < v; i++) {
 			for (int j = 0; j < b; j++) {
 				assert(x[i][j]->getType() == INT_VAR_EL);
-				((IntVarEL*) x[i][j])->setVLearnable();
-				((IntVarEL*) x[i][j])->setVDecidable(true);
+				((IntVarEL*)x[i][j])->setVLearnable();
+				((IntVarEL*)x[i][j])->setVDecidable(true);
 			}
 		}
 	}
 
-  void print(std::ostream& os) {
+	void print(std::ostream& os) override {
 		for (int i = 0; i < v; i++) {
 			for (int j = 0; j < b; j++) {
 				os << x[i][j]->getVal();
@@ -103,13 +114,16 @@ public:
 		}
 		os << "\n";
 	}
-
 };
 
 int main(int argc, char** argv) {
 	parseOptions(argc, argv);
 
-	int v, b, r, k, l;
+	int v;
+	int b;
+	int r;
+	int k;
+	int l;
 
 	assert(argc == 6);
 	v = atoi(argv[1]);
@@ -122,6 +136,3 @@ int main(int argc, char** argv) {
 
 	return 0;
 }
-
-
-

@@ -1,14 +1,15 @@
-cmake_minimum_required(VERSION 3.1.0)
+cmake_minimum_required(VERSION 3.5.0)
 
 project(chuffed CXX C)
 # The version number.
 set(chuffed_VERSION_MAJOR 0)
-set(chuffed_VERSION_MINOR 12)
-set(chuffed_VERSION_PATCH 0)
+set(chuffed_VERSION_MINOR 13)
+set(chuffed_VERSION_PATCH 3)
 
 ### Additional Definitions:
 option(STATIC "compile with the -static linker flag" OFF)
-
+option(CP_PROFILER "Build with the CP Profiler Integration" ON)
+option(SUPPORT_VAR_IMPACT "Build with support for impact branching" OFF)
 # ------------- Compiler Configuration -------------
 
 if(STATIC)
@@ -46,14 +47,14 @@ endif()
 
 # ------------- CP Profiler Integration -------------
 
-if(EXISTS "${CMAKE_SOURCE_DIR}/submodules/cp-profiler-integration/connector.hpp")
-  set(CHUFFED_PROFILER_SOURCES
-    ${CMAKE_SOURCE_DIR}/submodules/cp-profiler-integration/connector.hpp
-    ${CMAKE_SOURCE_DIR}/submodules/cp-profiler-integration/message.hpp
-  )
-else()
-  message("Configuring without CP Profiler support.")
-endif()
+add_library(thirdparty_cp_profiler OBJECT
+  thirdparty/cp-profiler-integration/connector.hpp
+  thirdparty/cp-profiler-integration/message.hpp
+)
+set_target_properties(thirdparty_cp_profiler PROPERTIES LINKER_LANGUAGE CXX)
+set_target_properties(thirdparty_cp_profiler PROPERTIES
+  CXX_CLANG_TIDY ""
+)
 
 # ---------- Support for impact branching -----------
 
@@ -63,6 +64,16 @@ if(SUPPORT_VAR_IMPACT)
     chuffed/branching/impact.cpp
   )
 endif()
+
+# ------------- Murmur Hash 3 -------------
+
+add_library(thirdparty_murmur OBJECT
+  thirdparty/MurmurHash3/MurmurHash3.cpp
+  thirdparty/MurmurHash3/MurmurHash3.h
+)
+set_target_properties(thirdparty_murmur PROPERTIES
+  CXX_CLANG_TIDY ""
+)
 
 # ------------- Main Chuffed Definition -------------
 
@@ -107,7 +118,6 @@ add_library(chuffed
   chuffed/mdd/MDD.cpp
   chuffed/mdd/mdd_prop.cpp
   chuffed/mdd/mdd_to_lgraph.cpp
-  chuffed/mdd/MurmurHash3.cpp
   chuffed/mdd/opcache.cpp
   chuffed/mdd/weighted_dfa.cpp
   chuffed/mdd/wmdd_prop.cpp
@@ -163,7 +173,6 @@ add_library(chuffed
   chuffed/mdd/MDD.h
   chuffed/mdd/mdd_prop.h
   chuffed/mdd/mdd_to_lgraph.h
-  chuffed/mdd/MurmurHash3.h
   chuffed/mdd/opcache.h
   chuffed/mdd/opts.h
   chuffed/mdd/sorters.h
@@ -178,11 +187,13 @@ add_library(chuffed
   chuffed/core/sat-types.h
   chuffed/core/options.h
   chuffed/core/propagator.h
-  ${CHUFFED_PROFILER_SOURCES}
   ${VAR_IMPACT_SOURCES}
+
+  $<TARGET_OBJECTS:thirdparty_cp_profiler>
+  $<TARGET_OBJECTS:thirdparty_murmur>
 )
 
-if(CHUFFED_PROFILER_SOURCES)
+if(CP_PROFILER)
   target_compile_definitions(chuffed PRIVATE HAS_PROFILER)
 endif()
 
@@ -190,18 +201,18 @@ endif()
 
 find_package(BISON 3.4)
 if(BISON_FOUND)
-  file(MAKE_DIRECTORY ${PROJECT_BINARY_DIR}/chuffed/flatzinc)
+  file(MAKE_DIRECTORY ${PROJECT_BINARY_DIR}/chuffed/flatzinc/generated_parser)
   bison_target(FZNParser
     ${PROJECT_SOURCE_DIR}/chuffed/flatzinc/parser.yxx
     ${PROJECT_BINARY_DIR}/parser.tab.cpp
-    DEFINES_FILE ${PROJECT_BINARY_DIR}/chuffed/flatzinc/parser.tab.h
+    DEFINES_FILE ${PROJECT_BINARY_DIR}/chuffed/flatzinc/generated_parser/parser.tab.h
     COMPILE_FLAGS "-l"
   )
 else()
   message(WARNING "Bison cannot be run. Using cached file, which may be out of date.")
   set(BISON_FZNParser_OUTPUTS
-    ${PROJECT_SOURCE_DIR}/chuffed/flatzinc/parser.tab.cpp
-    ${PROJECT_SOURCE_DIR}/chuffed/flatzinc/parser.tab.h
+    ${PROJECT_SOURCE_DIR}/chuffed/flatzinc/generated_parser/parser.tab.cpp
+    ${PROJECT_SOURCE_DIR}/chuffed/flatzinc/generated_parser/parser.tab.h
   )
 endif()
 
@@ -215,16 +226,33 @@ if(FLEX_FOUND AND BISON_FOUND)
   add_flex_bison_dependency(FZNLexer FZNParser)
 else()
   message(WARNING "Flex cannot be run. Using cached file, which may be out of date.")
-  set(FLEX_FZNLexer_OUTPUTS ${PROJECT_SOURCE_DIR}/chuffed/flatzinc/lexer.yy.cpp)
+  set(FLEX_FZNLexer_OUTPUTS ${PROJECT_SOURCE_DIR}/chuffed/flatzinc/generated_parser/lexer.yy.cpp)
 endif()
+
+# If CMAKE_UNITY_BUILD is enabled, we still want these files to be built separately
+# to avoid compilation errors.
+set_source_files_properties(
+    ${BISON_FZNParser_OUTPUTS}
+    ${FLEX_FZNLexer_OUTPUTS}
+  PROPERTIES
+    SKIP_UNITY_BUILD_INCLUSION ON
+)
+
+add_library(flatzinc_parser OBJECT
+  ${FLEX_FZNLexer_OUTPUTS}
+  ${BISON_FZNParser_OUTPUTS}
+)
+set_target_properties(flatzinc_parser PROPERTIES
+  CXX_CLANG_TIDY ""
+)
 
 add_library(chuffed_fzn
   chuffed/flatzinc/registry.cpp
   chuffed/flatzinc/flatzinc.cpp
-  ${FLEX_FZNLexer_OUTPUTS}
-  ${BISON_FZNParser_OUTPUTS}
   chuffed/flatzinc/flatzinc.h
   chuffed/flatzinc/ast.h
+
+  $<TARGET_OBJECTS:flatzinc_parser>
 )
 
 add_executable(fzn-chuffed chuffed/flatzinc/fzn-chuffed.cpp)
@@ -364,6 +392,9 @@ install(FILES ${CMAKE_BINARY_DIR}/chuffed.msc DESTINATION ${CMAKE_INSTALL_DATARO
 # ------------- CMake export configuration -------------
 include(CMakePackageConfigHelpers)
 
+file(RELATIVE_PATH REL_INCLUDEDIR ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/cmake/chuffed/ ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_INCLUDEDIR})
+file(RELATIVE_PATH REL_DATAROOTDIR ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/cmake/chuffed/ ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATAROOTDIR})
+
 export(EXPORT chuffed-targets FILE ${CMAKE_CURRENT_BINARY_DIR}/cmake/chuffed-targets.cmake)
 
 configure_package_config_file(
@@ -384,3 +415,29 @@ install(
   FILES "${CMAKE_CURRENT_BINARY_DIR}/chuffed-config-version.cmake"
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/chuffed
 )
+
+# ------------- TARGET format -------------
+if (NOT CLANG_FORMAT_EXECUTABLE)
+  find_program(CLANG_FORMAT_EXECUTABLE NAMES clang-format clang-format-11 clang-format-10 clang-format-9)
+endif()
+
+set(CLANG_FORMAT_FLAGS "-i" CACHE STRING "Flags passed to the clang-format executable")
+
+if (CLANG_FORMAT_EXECUTABLE)
+  file(GLOB_RECURSE FORMAT_FILES
+    ${PROJECT_SOURCE_DIR}/*.c
+    ${PROJECT_SOURCE_DIR}/*.cpp
+    ${PROJECT_SOURCE_DIR}/*.h
+    ${PROJECT_SOURCE_DIR}/*.hh
+    ${PROJECT_SOURCE_DIR}/*.hpp
+  )
+  list(FILTER FORMAT_FILES EXCLUDE REGEX ${PROJECT_BINARY_DIR}/*)
+  list(FILTER FORMAT_FILES EXCLUDE REGEX ${PROJECT_SOURCE_DIR}/thirdparty/*)
+  list(FILTER FORMAT_FILES EXCLUDE REGEX ${PROJECT_SOURCE_DIR}/chuffed/flatzinc/generated_parser/*)
+
+  separate_arguments(CLANG_FORMAT_FLAGS_LIST NATIVE_COMMAND ${CLANG_FORMAT_FLAGS})
+  add_custom_target(format
+    COMMAND ${CLANG_FORMAT_EXECUTABLE} ${CLANG_FORMAT_FLAGS_LIST} ${FORMAT_FILES}
+    COMMENT "Running ${CLANG_FORMAT_EXECUTABLE} on all source files"
+  )
+endif()

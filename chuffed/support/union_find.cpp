@@ -1,22 +1,13 @@
-#include <chuffed/support/union_find.h>
-#include <cassert>
-#include <vector>
-#include <iostream>
+#include "chuffed/support/union_find.h"
 
-using namespace std;
+#include "chuffed/core/engine.h"
 
 template <>
-UF<Tint>::~UF() {
-    //delete[] id;
-}
+UF<Tint>::~UF() = default;  // delete[] id;
 
 template <>
-UFRootInfo<Tint>::~UFRootInfo() {
-    //delete[] is_root;
-}
+UFRootInfo<Tint>::~UFRootInfo() = default;  // delete[] is_root;
 
+// Cannot delete Tints (should use smart pointers?)
 template <>
-RerootedUnionFind<Tint>::~RerootedUnionFind() {
-    //Cannot delete Tints (should use smart pointers?)
-    //delete[] parents;
-}
+RerootedUnionFind<Tint>::~RerootedUnionFind() = default;  // delete[] parents;

@@ -89,12 +89,50 @@ predicate array_bool_xor(array[int] of var bool: bs) =
 predicate int_mod(var int: x, var int: y, var int: z) =
   x=(x div y)*y+z;
 
+predicate bool_eq_imp(var bool: a, var bool: b, var bool: r);
 predicate int_eq_imp(var int: a, var int: b, var bool: r);
 predicate int_ne_imp(var int: a, var int: b, var bool: r);
 predicate int_ge_imp(var int: a, var int: b, var bool: r);
 predicate int_gt_imp(var int: a, var int: b, var bool: r);
 predicate int_le_imp(var int: a, var int: b, var bool: r);
 predicate int_lt_imp(var int: a, var int: b, var bool: r);
+
+predicate int_lin_eq_imp(
+    array [int] of int: as,
+    array [int] of var int: bs,
+    int: c,
+    var bool: r
+);
+predicate int_lin_le_imp(
+    array [int] of int: as,
+    array [int] of var int: bs,
+    int: c,
+    var bool: r
+);
+predicate int_lin_lt_imp(
+    array [int] of int: as,
+    array [int] of var int: bs,
+    int: c,
+    var bool: r
+);
+predicate int_lin_ge_imp(
+    array [int] of int: as,
+    array [int] of var int: bs,
+    int: c,
+    var bool: r
+);
+predicate int_lin_gt_imp(
+    array [int] of int: as,
+    array [int] of var int: bs,
+    int: c,
+    var bool: r
+);
+predicate int_lin_ne_imp(
+    array [int] of int: as,
+    array [int] of var int: bs,
+    int: c,
+    var bool: r
+);
 
 predicate array_var_int_element_imp(var int: b, array [int] of var int: as, var int: c, var bool: r);
 

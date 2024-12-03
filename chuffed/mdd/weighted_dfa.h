@@ -1,12 +1,12 @@
-#ifndef __WEIGHTED_DFA_H__
-#define __WEIGHTED_DFA_H__
-#include <chuffed/mdd/MurmurHash3.h>
-#include <chuffed/support/vec.h>
-#include <unordered_map>
-#include <memory>
-#include <vector>
+#ifndef WEIGHTED_DFA_H_
+#define WEIGHTED_DFA_H_
 
-#include <chuffed/mdd/opcache.h>
+#include "chuffed/mdd/opcache.h"
+#include "chuffed/support/vec.h"
+
+#include <memory>
+#include <unordered_map>
+#include <vector>
 
 // Code for manipulating a weighted DFA.
 // Converts a weighted DFA to a structurally hashed
@@ -27,176 +27,141 @@ class EVEdge;
 
 class EVNode {
 public:
-  EVNode(EVLayerGraph* _g, int _idx)
-    : g(_g), idx(_idx)
-  { }
-  EVEdge operator[](int idx);
+	EVNode(EVLayerGraph* _g, int _idx) : g(_g), idx(_idx) {}
+	EVEdge operator[](int idx) const;
 
-  int var(void);
-  int id(void);
-  int size(void);
+	int var() const;
+	int id() const;
+	int size() const;
 
-  EVLayerGraph* g;
-  int idx;
+	EVLayerGraph* g;
+	int idx;
 };
 
-inline bool operator==(const EVNode& x, const EVNode& y)
-{
-  return x.g == y.g && x.idx == y.idx;
-}
-inline bool operator!=(const EVNode& x, const EVNode& y)
-{
-  return !(x == y);
-}
+inline bool operator==(const EVNode& x, const EVNode& y) { return x.g == y.g && x.idx == y.idx; }
+inline bool operator!=(const EVNode& x, const EVNode& y) { return !(x == y); }
 
 EVNode& operator++(EVNode& x);
 
 class EVEdge {
 public:
-  EVEdge(int _val, int _weight, const EVNode& _dest)
-    : val(_val), weight(_weight), dest(_dest)
-  { }
+	EVEdge(int _val, int _weight, const EVNode& _dest) : val(_val), weight(_weight), dest(_dest) {}
 
-
-  int val;
-  int weight;
-  EVNode dest;
+	int val;
+	int weight;
+	EVNode dest;
 };
 
-
 class EVLayerGraph {
-// Local structs
-//==============
-  typedef struct {
-    int id;
-    int next;
-    int flag;
-  } TravInfo;
+	// Local structs
+	//==============
+	struct TravInfo {
+		int id;
+		int next;
+		int flag;
+	};
 
-// Globally visible structs
-//=========================
+	// Globally visible structs
+	//=========================
 public:
-  typedef struct {
-    int val;
-    int weight;
-    int dest; 
-  } EInfo;
+	struct EInfo {
+		int val;
+		int weight;
+		int dest;
+	};
 
-  typedef struct {
-    unsigned int var;
-    unsigned int sz;
-    
-    EInfo edges[1];
-  } NodeInfo;
+	struct NodeInfo {
+		unsigned int var;
+		unsigned int sz;
 
-  typedef NodeInfo* NodeRef;
-  typedef int NodeID;
+		EInfo edges[1];
+	};
 
-  // Need to set up a nice interface for traversal.
-  class IterNode {
-  public:
-    IterNode(EVLayerGraph* _graph, int _idx)
-      : graph(_graph), idx(_idx)
-    { }
+	using NodeRef = NodeInfo*;
+	using NodeID = int;
 
-    EVLayerGraph* graph;
-    int idx;
-  };
+	// Need to set up a nice interface for traversal.
+	class IterNode {
+	public:
+		IterNode(EVLayerGraph* _graph, int _idx) : graph(_graph), idx(_idx) {}
 
-// Local structs
-//==============
+		EVLayerGraph* graph;
+		int idx;
+	};
+
+	// Local structs
+	//==============
 protected:
-  struct eqnode
-  {
-     bool operator()(const NodeRef a1, const NodeRef a2) const
-     {
-        if( a1->var != a2->var )
-           return false;
-        if( a1->sz != a2->sz )
-           return false;
+	struct eqnode {
+		bool operator()(const NodeRef a1, const NodeRef a2) const {
+			if (a1->var != a2->var) {
+				return false;
+			}
+			if (a1->sz != a2->sz) {
+				return false;
+			}
 
-        for( unsigned int ii = 0; ii < a1->sz; ii++ )
-        {
-           if(  a1->edges[ii].val != a2->edges[ii].val
-             || a1->edges[ii].dest != a2->edges[ii].dest
-             || a1->edges[ii].weight != a2->edges[ii].weight )
-              return false;
-        }
-        return true;
-     }
-  };
+			for (unsigned int ii = 0; ii < a1->sz; ii++) {
+				if (a1->edges[ii].val != a2->edges[ii].val || a1->edges[ii].dest != a2->edges[ii].dest ||
+						a1->edges[ii].weight != a2->edges[ii].weight) {
+					return false;
+				}
+			}
+			return true;
+		}
+	};
 
-  struct hashnode
-  {
-     unsigned int operator()(const NodeRef a1) const
-     {
-        unsigned int hash = 5381;
-        
-        hash = ((hash << 5) + hash) + a1->var; 
-        hash = ((hash << 5) + hash) + a1->sz;
-#if 0
-        for(unsigned int ii = 0; ii < a1->sz; ii++)
-        {
-           hash = ((hash << 5) + hash) + a1->edges[ii].val;
-           hash = ((hash << 5) + hash) + a1->edges[ii].weight;
-           hash = ((hash << 5) + hash) + a1->edges[ii].dest;
-        }
-        return (hash & 0x7FFFFFFF);
-#else
-        uint32_t ret;
-        MurmurHash3_x86_32(&(a1->edges), sizeof(EInfo)*a1->sz, hash, &ret);
-        return ret;
-#endif
-     }
-  };
+	struct hashnode {
+		unsigned int operator()(NodeRef a1) const;
+	};
 
-  typedef std::unordered_map<const NodeRef, NodeID, hashnode, eqnode> NodeCache;
+	using NodeCache = std::unordered_map<const NodeRef, NodeID, hashnode, eqnode>;
 
-// Public Methods
+	// Public Methods
 public:
-  EVLayerGraph(void); // Do we need the number of variables as a parameter?
-  ~EVLayerGraph(void);
+	EVLayerGraph();  // Do we need the number of variables as a parameter?
+	~EVLayerGraph();
 
-  NodeID insert(int level, vec<EInfo>& edges);
+	NodeID insert(int level, vec<EInfo>& edges);
 
-  // Initialize the traversal info stuff.
-  // Returns the size of the computed subgraph.
-  int traverse(NodeID idx);
-  EVNode travBegin(void) { return EVNode(this, status[0].next); }
-  EVNode travEnd(void) { return EVNode(this, -1); }
+	// Initialize the traversal info stuff.
+	// Returns the size of the computed subgraph.
+	int traverse(NodeID idx);
+	EVNode travBegin() { return {this, status[0].next}; }
+	EVNode travEnd() { return {this, -1}; }
 
-  const static int EVFalse;
-  const static int EVTrue;
+	const static int EVFalse;
+	const static int EVTrue;
+
 protected:
-   inline NodeRef allocNode(int sz);
-   inline void deallocNode(NodeRef node);
-   
-   int nvars;
+	static inline NodeRef allocNode(int sz);
+	static inline void deallocNode(NodeRef node);
 
-   OpCache opcache;
-   NodeCache cache;
-   
-   int intermed_maxsz;
-   NodeRef intermed;
+	int nvars;
+
+	OpCache opcache;
+	NodeCache cache;
+
+	int intermed_maxsz{2};
+	NodeRef intermed;
 
 public:
-   std::vector<NodeRef> nodes;
+	std::vector<NodeRef> nodes;
 
-   // Traversal information.
-   std::vector<TravInfo> status;
+	// Traversal information.
+	std::vector<TravInfo> status;
 };
 
 // Transition for a cost-regular constraint.
-typedef struct {
-  int weight;
-  int dest;
-} WDFATrans;
+struct WDFATrans {
+	int weight;
+	int dest;
+};
 
-inline void create_edges(EVLayerGraph &graph,
-                         vec<EVLayerGraph::EInfo> &edges,
-                         const vec<EVLayerGraph::NodeID> &previous_layer,
-                         const WDFATrans *T, int dom,
-                         int nstates, int soff);
-EVLayerGraph::NodeID wdfa_to_layergraph(EVLayerGraph &graph, int nvars, int dom, WDFATrans *T, int nstates, int q0, vec<int> &accepts);
+inline void create_edges(EVLayerGraph& graph, vec<EVLayerGraph::EInfo>& edges,
+												 const vec<EVLayerGraph::NodeID>& previous_layer, const WDFATrans* T,
+												 int dom, int nstates, int soff);
+EVLayerGraph::NodeID wdfa_to_layergraph(EVLayerGraph& graph, int nvars, int dom, WDFATrans* T,
+																				int nstates, int q0, vec<int>& accepts);
 
 #endif

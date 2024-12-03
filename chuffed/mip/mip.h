@@ -1,12 +1,11 @@
 #ifndef mip_h
 #define mip_h
 
+#include "chuffed/core/propagator.h"
+#include "chuffed/support/misc.h"
+
 #include <map>
 #include <set>
-#include <chuffed/core/propagator.h>
-#include <chuffed/support/misc.h>
-
-using namespace std;
 
 class VarGroup;
 
@@ -17,23 +16,27 @@ struct LinearIneq {
 	long double ub;
 	bool lb_notR;
 	bool ub_notR;
-	LinearIneq() {}
+	LinearIneq() = default;
 };
 
 struct BoundChange {
-	int v;                 // which original variable
-	int w;                 // 0 = lower bound, 1 = upper bound
-	int d;                 // how much it increased by
+	int v;  // which original variable
+	int w;  // 0 = lower bound, 1 = upper bound
+	int d;  // how much it increased by
 	BoundChange(int _v, int _w, int _d) : v(_v), w(_w), d(_d) {}
 };
 
-
 class MIP : public Propagator {
-	enum SimplexStatus { SIMPLEX_OPTIMAL, SIMPLEX_GOOD_ENOUGH, SIMPLEX_IN_PROGRESS, SIMPLEX_UNBOUNDED };
+	enum SimplexStatus {
+		SIMPLEX_OPTIMAL,
+		SIMPLEX_GOOD_ENOUGH,
+		SIMPLEX_IN_PROGRESS,
+		SIMPLEX_UNBOUNDED
+	};
 
 public:
-	set<IntVar*> var_set;
-	map<IntVar*,int> var_map;
+	std::set<IntVar*> var_set;
+	std::map<IntVar*, int> var_map;
 	vec<IntVar*> vars;
 	vec<LinearIneq> ineqs;
 
@@ -41,18 +44,17 @@ public:
 	vec<Lit> ps;
 	vec<int> place;
 
-
 	vec<BoundChange> bctrail;
 	vec<int> bctrail_lim;
 
-	int level_lb;
-	int level_ub;
+	int level_lb{-1};
+	int level_ub{-1};
 
-	int status;
+	int status{0};
 
 	duration simplex_time;
 
-	VarGroup *toplevelgroup;
+	VarGroup* toplevelgroup;
 
 	// temp data
 	vec<int> new_bc;
@@ -70,30 +72,30 @@ public:
 
 	void setObjective(int val) {}
 	long double getRC(IntVar* v);
-	void printStats();
+	void printStats() override;
 
 	// Main propagator methods
-	
-	void wakeup(int i, int c);
-	bool propagate();
-	void clearPropState();
+
+	void wakeup(int i, int c) override;
+	bool propagate() override;
+	void clearPropState() override;
 
 	// LP methods
 
-	int  getLimit();
+	int getLimit() const;
 	void updateBounds();
-	int  doSimplex();
+	int doSimplex() const;
 	void unboundedFailure();
 	bool propagateAllBounds();
-	template<int T>	bool propagateBound(int i, long double s);
+	template <int T>
+	bool propagateBound(int i, long double s);
 	long double objVarBound();
 
 	// Inline functions
 
-	inline int decisionLevel() { return bctrail_lim.size(); }
-
+	inline int decisionLevel() const { return bctrail_lim.size(); }
 };
 
-extern MIP *mip;
+extern MIP* mip;
 
 #endif

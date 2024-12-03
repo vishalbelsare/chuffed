@@ -1,20 +1,18 @@
-#ifndef __MDD_H__
-#define __MDD_H__
+#ifndef MDD_H_
+#define MDD_H_
 
 // #define SPLIT_CACHE
 // #define USE_MAP
 
+#include "chuffed/mdd/opcache.h"
+#include "chuffed/support/vec.h"
+
 #include <cassert>
-
 #include <map>
-
 #include <unordered_map>
-#include <chuffed/mdd/opcache.h>
-
 #include <vector>
-#include <chuffed/support/vec.h>
 
-typedef unsigned int _MDD;
+using MDDNodeInt = unsigned int;
 
 // _MDD node format: var #edges low {(v_0, d_0), (v_1, d_1), ..., (v_k, d_k)}
 // Values [v_0, v_1) -> d_0, [v_1, v_2) -> d_1, etc.
@@ -23,257 +21,233 @@ typedef unsigned int _MDD;
 
 // Allows negation, with arbitrary domains, and canonicity.
 
-typedef struct {
-  int val;
-  unsigned int dest; 
-} MDDEdge;
+struct MDDEdge {
+	int val;
+	unsigned int dest;
+};
 
-typedef struct {
-  unsigned int var;
-  unsigned int sz;
-  
-  unsigned int low; // (-inf,...)
-  MDDEdge edges[1];
-} MDDNodeEl;
+struct MDDNodeEl {
+	unsigned int var;
+	unsigned int sz;
 
-typedef MDDNodeEl* MDDNode;
+	unsigned int low;  // (-inf,...)
+	MDDEdge edges[1];
+};
 
-typedef std::pair< int, _MDD > edgepair;
-typedef std::pair< int, int > intpair;
+using MDDNode = MDDNodeEl*;
+
+using edgepair = std::pair<int, MDDNodeInt>;
+using intpair = std::pair<int, int>;
 #define MDDTRUE 1
 #define MDDFALSE 0
 
-struct ltnode 
-{
-   bool operator()(const MDDNode a1, const MDDNode a2) const
-   {
-      assert( 0 ); // FIXME: out of date.
-      return false;
-   }
+struct ltnode {
+	bool operator()(const MDDNode /*a1*/, const MDDNode /*a2*/) const {
+		assert(0);  // FIXME: out of date.
+		return false;
+	}
 };
 
-struct eqnode
-{
-   bool operator()(const MDDNode a1, const MDDNode a2) const
-   {
-      if( a1->var != a2->var )
-         return false;
-      if( a1->low != a2->low )
-         return false;
-      if( a1->sz != a2->sz )
-         return false;
+struct eqnode {
+	bool operator()(const MDDNode a1, const MDDNode a2) const {
+		if (a1->var != a2->var) {
+			return false;
+		}
+		if (a1->low != a2->low) {
+			return false;
+		}
+		if (a1->sz != a2->sz) {
+			return false;
+		}
 
-      for( unsigned int ii = 0; ii < a1->sz; ii++ )
-      {
-         if( a1->edges[ii].val != a2->edges[ii].val || a1->edges[ii].dest != a2->edges[ii].dest )
-            return false;
-      }
-      return true;
-   }
+		for (unsigned int ii = 0; ii < a1->sz; ii++) {
+			if (a1->edges[ii].val != a2->edges[ii].val || a1->edges[ii].dest != a2->edges[ii].dest) {
+				return false;
+			}
+		}
+		return true;
+	}
 };
 
-struct hashnode
-{
-   unsigned int operator()(const MDDNode a1) const
-   {
-      unsigned int hash = 5381;
-      
-      hash = ((hash << 5) + hash) + a1->var; 
-      hash = ((hash << 5) + hash) + a1->sz;
-      hash = ((hash << 5) + hash) + a1->low;
+struct hashnode {
+	unsigned int operator()(const MDDNode a1) const {
+		unsigned int hash = 5381;
 
-      for(unsigned int ii = 0; ii < a1->sz; ii++)
-      {
-         hash = ((hash << 5) + hash) + a1->edges[ii].val;
-         hash = ((hash << 5) + hash) + a1->edges[ii].dest;
-      }
-      return (hash & 0x7FFFFFFF);
-   }
+		hash = ((hash << 5) + hash) + a1->var;
+		hash = ((hash << 5) + hash) + a1->sz;
+		hash = ((hash << 5) + hash) + a1->low;
+
+		for (unsigned int ii = 0; ii < a1->sz; ii++) {
+			hash = ((hash << 5) + hash) + a1->edges[ii].val;
+			hash = ((hash << 5) + hash) + a1->edges[ii].dest;
+		}
+		return (hash & 0x7FFFFFFF);
+	}
 };
 
 #ifdef USE_MAP
 typedef std::map<const MDDNode, int, ltnode> NodeCache;
 #else
-typedef std::unordered_map<const MDDNode, int, hashnode, eqnode> NodeCache;
+using NodeCache = std::unordered_map<const MDDNode, int, hashnode, eqnode>;
 #endif
 
-#if 0
-class OpCache
-{
-public:
-   enum { OP_AND, OP_OR, OP_NOT, OP_BOUND, OP_EXIST, OP_EXPAND, OP_LEQ };
+// class OpCache {
+// public:
+// 	enum { OP_AND, OP_OR, OP_NOT, OP_BOUND, OP_EXIST, OP_EXPAND, OP_LEQ };
 
-   OpCache(unsigned int size);
-   ~OpCache(void);
-   
-   unsigned int check(char op, unsigned int a, unsigned int b); // Returns UINT_MAX on failure.
-   void insert(char op, unsigned int a, unsigned int b, unsigned int res);
-   
-   typedef struct {
-      unsigned int hash;
-      char op;
-      unsigned int a;
-      unsigned int b;
-      unsigned int res;
-   } cache_entry;
+// 	OpCache(unsigned int size);
+// 	~OpCache(void);
 
-private:
-   inline unsigned int hash(char op, unsigned int a, unsigned int b);
-   
-   // Implemented with sparse-array stuff. 
-   unsigned int tablesz;
+// 	unsigned int check(char op, unsigned int a, unsigned int b);  // Returns UINT_MAX on failure.
+// 	void insert(char op, unsigned int a, unsigned int b, unsigned int res);
 
-   unsigned int members;
-   unsigned int* indices;
-   cache_entry* entries;
-};
-#endif
+// 	typedef struct {
+// 		unsigned int hash;
+// 		char op;
+// 		unsigned int a;
+// 		unsigned int b;
+// 		unsigned int res;
+// 	} cache_entry;
+
+// private:
+// 	inline unsigned int hash(char op, unsigned int a, unsigned int b);
+
+// 	// Implemented with sparse-array stuff.
+// 	unsigned int tablesz;
+
+// 	unsigned int members;
+// 	unsigned int* indices;
+// 	cache_entry* entries;
+// };
 
 class MDDTable;
 
 class MDD {
 public:
-  MDD(MDDTable* _table, _MDD _val)
-    : table( _table ), val( _val )
-  {  }
+	MDD(MDDTable* _table, MDDNodeInt _val) : table(_table), val(_val) {}
 
-  MDD(void)
-    : table( NULL ), val( -1 )
-  {  }  
+	MDD() : table(nullptr), val(-1) {}
 
-  MDDTable* table;
-  _MDD val;
+	MDDTable* table;
+	MDDNodeInt val;
 };
 
-
-class MDDTable
-{
+class MDDTable {
 public:
-   enum { OP_AND, OP_OR, OP_NOT, OP_BOUND, OP_EXIST, OP_EXPAND, OP_LEQ };
+	enum { OP_AND, OP_OR, OP_NOT, OP_BOUND, OP_EXIST, OP_EXPAND, OP_LEQ };
 
-   MDDTable(int nvars); // Allows open domain.
-   ~MDDTable(void);
-   
-   const std::vector<MDDNode>& getNodes(void)
-   {
-       return nodes;
-   }
+	MDDTable(int nvars);  // Allows open domain.
+	~MDDTable();
 
-   std::vector<int>& getStatus(void)
-   {
-       return status;
-   }
-   
-   void clear_status(_MDD r);
+	const std::vector<MDDNode>& getNodes() { return nodes; }
 
-   void print_node(_MDD r);
-   void print_nodes(void);    
-   void print_mdd(_MDD r);
-   void print_mdd_tikz(_MDD r);
-   void print_dot(_MDD r);
-#if 1
-   int cache_sz(void)
-   {
-      return cache.size();
-   }
-#endif
+	std::vector<int>& getStatus() { return status; }
 
-   _MDD insert(unsigned int var, unsigned int low, unsigned int start, bool expand = false);
+	void clear_status(MDDNodeInt r);
 
-   template <class T> _MDD tuple(vec<T>&);
-//   _MDD tuple(std::vector<int>&);
+	void print_node(MDDNodeInt r);
+	void print_nodes();
+	void print_mdd(MDDNodeInt r);
+	static void print_mdd_tikz(MDDNodeInt r);
+	static void print_dot(MDDNodeInt r);
+	int cache_sz() { return static_cast<int>(cache.size()); }
 
-   MDD vareq(int var, int val) { return MDD(this, mdd_vareq(var,val)); }
-   MDD ttt(void) { return MDD(this, MDDTRUE); }
-   MDD fff(void) { return MDD(this, MDDFALSE); }
+	MDDNodeInt insert(unsigned int var, unsigned int low, unsigned int start, bool expand = false);
 
-   _MDD mdd_vareq(int var, int val);
-   _MDD mdd_varlt(int var, int val);
-   _MDD mdd_vargt(int var, int val);
-   _MDD mdd_case(int var, std::vector<edgepair>& cases);
+	template <class T>
+	MDDNodeInt tuple(vec<T>& /*tpl*/);
+	//   MDDNodeInt tuple(std::vector<int>&);
 
-   _MDD bound(_MDD, vec<intpair>& range);
-   _MDD expand(int var, _MDD r);
+	MDD vareq(int var, int val) { return {this, mdd_vareq(var, val)}; }
+	MDD ttt() { return {this, MDDTRUE}; }
+	MDD fff() { return {this, MDDFALSE}; }
 
-   _MDD mdd_or(_MDD, _MDD);
-   _MDD mdd_and(_MDD, _MDD);
-   _MDD mdd_not(_MDD);
-   bool mdd_leq(_MDD, _MDD);
+	MDDNodeInt mdd_vareq(int var, int val);
+	MDDNodeInt mdd_varlt(int var, int val);
+	MDDNodeInt mdd_vargt(int var, int val);
+	MDDNodeInt mdd_case(int var, std::vector<edgepair>& cases);
 
-   _MDD mdd_exist(_MDD, unsigned int);
+	static MDDNodeInt bound(MDDNodeInt /*root*/, vec<intpair>& range);
+	MDDNodeInt expand(int var, MDDNodeInt r);
+
+	MDDNodeInt mdd_or(MDDNodeInt /*a*/, MDDNodeInt /*b*/);
+	MDDNodeInt mdd_and(MDDNodeInt /*a*/, MDDNodeInt /*b*/);
+	MDDNodeInt mdd_not(MDDNodeInt /*root*/);
+	bool mdd_leq(MDDNodeInt /*a*/, MDDNodeInt /*b*/);
+
+	MDDNodeInt mdd_exist(MDDNodeInt /*root*/, unsigned int /*var*/);
 
 private:
-   inline MDDNode allocNode(int sz);
-   inline void deallocNode(MDDNode node);
-   
-   int nvars;
+	static inline MDDNode allocNode(int n_edges);
+	static inline void deallocNode(MDDNode node);
 
-   OpCache opcache;
+	int nvars;
+
+	OpCache opcache;
 #ifdef SPLIT_CACHE
-   NodeCache* cache;
+	NodeCache* cache;
 #else
-   NodeCache cache;
+	NodeCache cache;
 #endif
-   
-   std::vector<MDDEdge> stack;
-   unsigned int intermed_maxsz;
-   MDDNode intermed;
 
-   std::vector<MDDNode> nodes;
-   std::vector<int> status;
+	std::vector<MDDEdge> stack;
+	unsigned int intermed_maxsz{2};
+	MDDNode intermed;
+
+	std::vector<MDDNode> nodes;
+	std::vector<int> status;
 };
 
 MDD operator|(const MDD& a, const MDD& b);
 MDD operator&(const MDD& a, const MDD& b);
 MDD operator^(const MDD& a, const MDD& b);
-MDD operator~(const MDD& a);
+MDD operator~(const MDD& r);
 MDD mdd_iff(const MDD& a, const MDD& b);
-bool operator <= (const MDD& a, const MDD& b);
+bool operator<=(const MDD& a, const MDD& b);
 
-// Convert the MDD to some other circuit. 
-template<class F>
-F transform_mdd(F fff, F ttt, std::vector< std::vector<F> >& vals, MDDTable& tab, _MDD node)
-{
-  std::vector<F> cache;
-  F ret( transform_mdd(fff, ttt, vals, tab.getNodes(), tab.getStatus(), cache, node) );
-  tab.clear_status(node);
-  return ret;
+// Convert the MDD to some other circuit.
+template <class F>
+F transform_mdd(F fff, F ttt, std::vector<std::vector<F> >& vals, MDDTable& tab, MDDNodeInt node) {
+	std::vector<F> cache;
+	F ret(transform_mdd(fff, ttt, vals, tab.getNodes(), tab.getStatus(), cache, node));
+	tab.clear_status(node);
+	return ret;
 }
 
-template<class F>
-F transform_mdd(F fff, F ttt, std::vector< std::vector<F> >& vals,
-      const std::vector<MDDNode>& nodes, std::vector<int>& status, std::vector<F>& cache, _MDD node)
-{
-  if(node == MDDTRUE)
-    return ttt;
-  if(node == MDDFALSE)
-    return fff;
+template <class F>
+F transform_mdd(F fff, F ttt, std::vector<std::vector<F> >& vals, const std::vector<MDDNode>& nodes,
+								std::vector<int>& status, std::vector<F>& cache, MDDNodeInt node) {
+	if (node == MDDTRUE) {
+		return ttt;
+	}
+	if (node == MDDFALSE) {
+		return fff;
+	}
 
-  int n_id = node;
-  if( status[n_id] != 0 )
-  {
-    return cache[status[n_id]-1];
-  }
-  
-  F ret = fff;
-  assert(nodes[n_id]->low == MDDFALSE);
-  for( unsigned int ii = 0; ii < nodes[n_id]->sz-1; ii++ )
-  {
-    if(nodes[n_id]->edges[ii].dest == MDDFALSE)
-      continue;
-    int low = nodes[n_id]->edges[ii].val;
-    int high = nodes[n_id]->edges[ii+1].val;
+	const int n_id = node;
+	if (status[n_id] != 0) {
+		return cache[status[n_id] - 1];
+	}
 
-    F val = fff;
-    for(int v = low; v < high; v++)
-    {
-      val = val|vals[nodes[n_id]->var][nodes[n_id]->edges[ii].val];
-    }
-    ret = ret|(val & transform_mdd(fff, ttt, vals, nodes, status, cache, nodes[n_id]->edges[ii].dest));
-  }
-  cache.push_back(ret);
-  status[n_id] = cache.size();
+	F ret = fff;
+	assert(nodes[n_id]->low == MDDFALSE);
+	for (unsigned int ii = 0; ii < nodes[n_id]->sz - 1; ii++) {
+		if (nodes[n_id]->edges[ii].dest == MDDFALSE) {
+			continue;
+		}
+		const int low = nodes[n_id]->edges[ii].val;
+		const int high = nodes[n_id]->edges[ii + 1].val;
 
-  return ret;
+		F val = fff;
+		for (int v = low; v < high; v++) {
+			val = val | vals[nodes[n_id]->var][nodes[n_id]->edges[ii].val];
+		}
+		ret = ret |
+					(val & transform_mdd(fff, ttt, vals, nodes, status, cache, nodes[n_id]->edges[ii].dest));
+	}
+	cache.push_back(ret);
+	status[n_id] = cache.size();
+
+	return ret;
 }
 #endif

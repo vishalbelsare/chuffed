@@ -1,18 +1,26 @@
-#include <cstdio>
+#include "chuffed/branching/branching.h"
+#include "chuffed/core/engine.h"
+#include "chuffed/core/options.h"
+#include "chuffed/core/sat.h"
+#include "chuffed/globals/globals.h"
+#include "chuffed/ldsb/ldsb.h"
+#include "chuffed/primitives/primitives.h"
+#include "chuffed/support/vec.h"
+#include "chuffed/vars/int-var.h"
+#include "chuffed/vars/modelling.h"
+#include "chuffed/vars/vars.h"
+
 #include <cassert>
-#include <chuffed/core/engine.h>
-#include <chuffed/core/propagator.h>
-#include <chuffed/branching/branching.h>
-#include <chuffed/vars/modelling.h>
-#include <chuffed/ldsb/ldsb.h>
+#include <cstdio>
+#include <cstdlib>
+#include <ostream>
 
 class LatinSquare : public Problem {
 public:
-	int const n;
-	vec<vec<IntVar*> > x;                           // squares labels
+	const int n;
+	vec<vec<IntVar*> > x;  // squares labels
 
 	LatinSquare(int _n) : n(_n) {
-
 		createVars(x, n, n, 1, n);
 
 		vec<vec<IntVar*> > xt;
@@ -27,7 +35,7 @@ public:
 		flatten(x, s);
 
 		branch(s, VAR_INORDER, VAL_MIN);
-//		branch(s, VAR_SIZE_MIN, VAL_MIN);
+		//		branch(s, VAR_SIZE_MIN, VAL_MIN);
 
 		output_vars(s);
 
@@ -47,28 +55,29 @@ public:
 
 		} else if (so.sym_static) {
 			for (int i = 0; i < n; i++) {
-				int_rel(x[0][i], IRT_EQ, i+1);
+				int_rel(x[0][i], IRT_EQ, i + 1);
 			}
 			for (int i = 1; i < n; i++) {
-				int_rel(x[i][0], IRT_EQ, i+1);
+				int_rel(x[i][0], IRT_EQ, i + 1);
 			}
 		}
-
 	}
 
-	void restrict_learnable() {
+	void restrict_learnable() override {
 		printf("Setting learnable white list\n");
-		for (int i = 0; i < sat.nVars(); i++) sat.flags[i] = 0;
+		for (int i = 0; i < sat.nVars(); i++) {
+			sat.flags[i] = LitFlags(false, false, false);
+		}
 		for (int i = 0; i < n; i++) {
 			for (int j = 0; j < n; j++) {
 				assert(x[i][j]->getType() == INT_VAR_EL);
-				((IntVarEL*) x[i][j])->setVLearnable();
-				((IntVarEL*) x[i][j])->setVDecidable(true);
+				((IntVarEL*)x[i][j])->setVLearnable();
+				((IntVarEL*)x[i][j])->setVDecidable(true);
 			}
 		}
 	}
 
-  void print(std::ostream& os) {
+	void print(std::ostream& os) override {
 		for (int i = 0; i < n; i++) {
 			for (int j = 0; j < n; j++) {
 				os << x[i][j]->getVal() << ", ";
@@ -77,7 +86,6 @@ public:
 		}
 		os << "\n";
 	}
-
 };
 
 int main(int argc, char** argv) {
@@ -92,6 +100,3 @@ int main(int argc, char** argv) {
 
 	return 0;
 }
-
-
-
